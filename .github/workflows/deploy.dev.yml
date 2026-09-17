@@ -1,0 +1,204 @@
+name: Deploy Snowflake Operator - DEV
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+  ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+  EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME }}
+  K8S_NAMESPACE: ${{ vars.K8S_NAMESPACE }}
+
+jobs:
+
+  validate:
+    name: Validate Go Operator
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Check formatting
+        run: |
+          test -z "$(gofmt -l .)"
+
+      - name: Go Vet
+        run: go vet ./...
+
+      - name: Go Test
+        run: go test ./...
+
+      - name: Build Operator
+        run: go build ./...
+
+
+  deploy:
+    name: Build and Deploy DEV
+    needs: validate
+
+    runs-on: ubuntu-latest
+
+    environment: dev
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+
+      # ---------------------------------------------------
+      # AWS authentication using GitHub OIDC
+      # ---------------------------------------------------
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+
+      # ---------------------------------------------------
+      # Verify AWS identity
+      # ---------------------------------------------------
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
+
+
+      # ---------------------------------------------------
+      # Login to ECR
+      # ---------------------------------------------------
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+
+      # ---------------------------------------------------
+      # Generate immutable Docker tag
+      # ---------------------------------------------------
+
+      - name: Set image variables
+        run: |
+          echo "IMAGE_TAG=dev-${GITHUB_SHA::12}" >> "$GITHUB_ENV"
+          echo "ECR_REGISTRY=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com" >> "$GITHUB_ENV"
+
+
+      # ---------------------------------------------------
+      # Build Docker image
+      # ---------------------------------------------------
+
+      - name: Build operator image
+        run: |
+          docker build \
+            -t ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG} .
+
+
+      # ---------------------------------------------------
+      # Push Docker image
+      # ---------------------------------------------------
+
+      - name: Push operator image
+        run: |
+          docker push \
+            ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}
+
+
+      # ---------------------------------------------------
+      # Configure kubectl for EKS
+      # ---------------------------------------------------
+
+      - name: Configure EKS kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region ${AWS_REGION} \
+            --name ${EKS_CLUSTER_NAME}
+
+
+      # ---------------------------------------------------
+      # Verify Kubernetes access
+      # ---------------------------------------------------
+
+      - name: Verify Kubernetes connection
+        run: |
+          kubectl get nodes
+          kubectl get namespace ${K8S_NAMESPACE}
+
+
+      # ---------------------------------------------------
+      # Update operator image
+      # ---------------------------------------------------
+
+      - name: Deploy operator image
+        run: |
+          kubectl set image \
+            deployment/snowflake-operator \
+            operator=${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG} \
+            -n ${K8S_NAMESPACE}
+
+
+      # ---------------------------------------------------
+      # Wait for rollout
+      # ---------------------------------------------------
+
+      - name: Wait for operator rollout
+        run: |
+          kubectl rollout status \
+            deployment/snowflake-operator \
+            -n ${K8S_NAMESPACE} \
+            --timeout=5m
+
+
+      # ---------------------------------------------------
+      # Apply Snowflake CR
+      # ---------------------------------------------------
+
+      - name: Deploy Snowflake database
+        run: |
+          kubectl apply \
+            -f manifests/dev/database.yaml
+
+
+      # ---------------------------------------------------
+      # Validate CR
+      # ---------------------------------------------------
+
+      - name: Verify Snowflake Database CR
+        run: |
+          kubectl get snowflakedatabase \
+            -n ${K8S_NAMESPACE}
+
+          kubectl describe snowflakedatabase \
+            dev-test-db \
+            -n ${K8S_NAMESPACE}
+
+
+      # ---------------------------------------------------
+      # Show operator logs if something failed
+      # ---------------------------------------------------
+
+      - name: Operator logs
+        if: failure()
+        run: |
+          kubectl logs \
+            -n ${K8S_NAMESPACE} \
+            -l app=snowflake-operator \
+            --tail=200
