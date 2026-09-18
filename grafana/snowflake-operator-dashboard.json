@@ -1,0 +1,14 @@
+{
+  "title": "Snowflake Go Operator",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "panels": [
+    {"type":"stat","title":"Operator Up","gridPos":{"x":0,"y":0,"w":6,"h":4},"targets":[{"expr":"snowflake_operator_up"}]},
+    {"type":"stat","title":"Managed Roles","gridPos":{"x":6,"y":0,"w":6,"h":4},"targets":[{"expr":"snowflake_operator_managed_resources{kind=\"role\"}"}]},
+    {"type":"timeseries","title":"Reconcile Rate","gridPos":{"x":0,"y":4,"w":12,"h":8},"targets":[{"expr":"sum by (kind) (rate(snowflake_operator_reconcile_total[5m]))"}]},
+    {"type":"timeseries","title":"Reconcile Errors","gridPos":{"x":12,"y":4,"w":12,"h":8},"targets":[{"expr":"sum by (kind) (rate(snowflake_operator_reconcile_errors_total[5m]))"}]},
+    {"type":"timeseries","title":"Drift Repairs","gridPos":{"x":0,"y":12,"w":12,"h":8},"targets":[{"expr":"sum by (kind) (increase(snowflake_operator_drift_repairs_total[1h]))"}]},
+    {"type":"timeseries","title":"Reconcile Duration p95","gridPos":{"x":12,"y":12,"w":12,"h":8},"targets":[{"expr":"histogram_quantile(0.95, sum by (le,kind) (rate(snowflake_operator_reconcile_duration_seconds_bucket[5m])))"}]}
+  ]
+}

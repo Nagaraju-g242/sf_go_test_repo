@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+
+metadata:
+  name: snowflake-operator-config
+
+data:
+  ENVIRONMENT: "DEV"
+
+  WATCH_NAMESPACE: "snowflake-system"
+
+  SNOWFLAKE_ACCOUNT: "LSOLRKP-VM26303"
+  SNOWFLAKE_USER: "SF_OPERATOR_OIDC"
+
+  SNOWFLAKE_TOKEN_FILE: "/var/run/secrets/tokens/snowflake-token"

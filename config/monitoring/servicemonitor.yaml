@@ -1,0 +1,12 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: snowflake-operator
+  namespace: snowflake-system
+spec:
+  selector:
+    matchLabels: {app: snowflake-operator}
+  endpoints:
+  - port: metrics
+    path: /metrics
+    interval: 30s

@@ -1,0 +1,18 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata: {name: snowflakegrants.snowflake.example.com}
+spec:
+  group: snowflake.example.com
+  names: {kind: SnowflakeGrant, plural: snowflakegrants, singular: snowflakegrant, shortNames: [sfgrant]}
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    served: true
+    storage: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec: {type: object}
+          status: {type: object}
+    subresources: {status: {}}

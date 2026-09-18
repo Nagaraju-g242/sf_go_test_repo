@@ -1,0 +1,24 @@
+apiVersion: snowflake.example.com/v1alpha1
+kind: SnowflakeUser
+metadata: {name: snowflake-operator-user, namespace: snowflake-system}
+spec: {name: SNOWFLAKE_OPERATOR_USER, defaultRole: RAW_SALES_DEV_WRITE, comment: Managed service user}
+---
+apiVersion: snowflake.example.com/v1alpha1
+kind: SnowflakeDatabase
+metadata: {name: raw-go-db, namespace: snowflake-system}
+spec: {name: RAW_GO_DB, comment: Managed database}
+---
+apiVersion: snowflake.example.com/v1alpha1
+kind: SnowflakeSchema
+metadata: {name: raw-go-schema, namespace: snowflake-system}
+spec: {database: RAW__GO_DB, name: RAW_GO_SALES, comment: Managed schema}
+---
+apiVersion: snowflake.example.com/v1alpha1
+kind: SnowflakeWarehouse
+metadata: {name: raw-go-wh, namespace: snowflake-system}
+spec: {name: RAW_GO_WH, warehouseSize: XSMALL, autoSuspend: 300, comment: Managed warehouse}
+---
+apiVersion: snowflake.example.com/v1alpha1
+kind: SnowflakeGrant
+metadata: {name: raw-sales-write-usage, namespace: snowflake-system}
+spec: {privilege: USAGE, on: DATABASE, object: RAW_DB, toRole: RAW_SALES_DEV_WRITE}

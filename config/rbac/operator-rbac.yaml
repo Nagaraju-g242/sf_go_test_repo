@@ -1,0 +1,19 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: {name: snowflake-operator}
+rules:
+- apiGroups: ["snowflake.example.com"]
+  resources: ["snowflakeroles","snowflakeusers","snowflakedatabases","snowflakeschemas","snowflakewarehouses","snowflakegrants"]
+  verbs: [get,list,watch,create,update,patch,delete]
+- apiGroups: ["snowflake.example.com"]
+  resources: ["snowflakeroles/status","snowflakeusers/status","snowflakedatabases/status","snowflakeschemas/status","snowflakewarehouses/status","snowflakegrants/status"]
+  verbs: [get,update,patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: {name: snowflake-operator}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: snowflake-operator}
+subjects:
+- kind: ServiceAccount
+  name: snowflake-operator
+  namespace: snowflake-system

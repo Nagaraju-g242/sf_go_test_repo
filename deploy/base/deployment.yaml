@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: snowflake-operator
+
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: snowflake-operator
+
+  template:
+    metadata:
+      labels:
+        app: snowflake-operator
+
+    spec:
+      serviceAccountName: snowflake-operator
+
+      containers:
+        - name: operator
+
+          image: snowflake-operator:latest
+
+          ports:
+            - name: metrics
+              containerPort: 8080
+
+          envFrom:
+            - configMapRef:
+                name: snowflake-operator-config
+
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 2Gi
+
+          volumeMounts:
+            - name: snowflake-token
+              mountPath: /var/run/secrets/tokens
+              readOnly: true
+
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: 10
+            periodSeconds: 10
+
+      volumes:
+        - name: snowflake-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: snowflake-token
+                  expirationSeconds: 3600
+                  audience: snowflakecomputing.com

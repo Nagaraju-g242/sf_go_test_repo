@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: snowflake-operator-metrics
+  namespace: snowflake-system
+  labels: {app: snowflake-operator}
+spec:
+  selector: {app: snowflake-operator}
+  ports:
+  - name: metrics
+    port: 8080
+    targetPort: metrics

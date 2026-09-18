@@ -1,0 +1,9 @@
+apiVersion: snowflake.example.com/v1alpha1
+kind: SnowflakeRole
+metadata:
+  name: raw-sales-dev-write
+  namespace: snowflake-system
+spec:
+  name: RAW_SALES_DEV_WRITE
+  comment: Managed by Go Snowflake Operator
+  autoReconcile: true

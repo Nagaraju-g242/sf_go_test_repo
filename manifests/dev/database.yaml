@@ -1,0 +1,10 @@
+apiVersion: snowflake.example.com/v1alpha1
+kind: SnowflakeDatabase
+
+metadata:
+  name: dev-test-db
+  namespace: snowflake-system
+
+spec:
+  name: DEV_OPERATOR_DB
+  comment: Database created by DEV Snowflake operator
