@@ -39,7 +39,17 @@ jobs:
 
       - name: Check formatting
         run: |
-          test -z "$(gofmt -l .)"
+          UNFORMATTED="$(gofmt -l .)"
+
+          if [ -n "$UNFORMATTED" ]; then
+            echo "The following Go files are not formatted:"
+            echo "$UNFORMATTED"
+            echo ""
+            echo "Run 'gofmt -w .' locally and commit the changes."
+            exit 1
+          fi
+
+    echo "All Go files are correctly formatted."
 
       - name: Go Vet
         run: go vet ./...
