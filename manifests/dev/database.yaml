@@ -2,9 +2,9 @@ apiVersion: snowflake.example.com/v1alpha1
 kind: SnowflakeDatabase
 
 metadata:
-  name: dev-test-db
+  name: dev-test-db2
   namespace: snowflake-system
 
 spec:
-  name: DEV_OPERATOR_DB
+  name: DEV_OPERATOR_DB2
   comment: Database created by DEV Snowflake operator
