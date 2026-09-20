@@ -1,9 +1,11 @@
 name: Deploy Snowflake Operator - DEV
 
+# ============================================================
+# MANUAL TRIGGER ONLY
+# Nothing runs automatically when changes are pushed/merged
+# to the main branch.
+# ============================================================
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
@@ -19,6 +21,9 @@ env:
 
 jobs:
 
+  # ============================================================
+  # STAGE 1 - VALIDATE GO OPERATOR
+  # ============================================================
   validate:
     name: Validate Go Operator
     runs-on: ubuntu-latest
@@ -60,13 +65,147 @@ jobs:
       - name: Build Operator
         run: go build ./...
 
+      - name: Validation Summary
+        run: |
+          echo "### Validation Result" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Go Operator validation completed successfully." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Formatting: Passed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Go Vet: Passed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Go Test: Passed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Go Build: Passed" >> "$GITHUB_STEP_SUMMARY"
 
-  deploy:
-    name: Build and Deploy DEV
+
+  # ============================================================
+  # STAGE 2 - BUILD
+  # ============================================================
+  build:
+    name: Build
     needs: validate
-
     runs-on: ubuntu-latest
+    environment: dev
 
+    # Pass Build Number and Image URI to Deploy DEV
+    outputs:
+      build_number: ${{ steps.build-info.outputs.build_number }}
+      image_uri: ${{ steps.build-info.outputs.image_uri }}
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+
+      # --------------------------------------------------------
+      # AWS authentication using GitHub OIDC
+      # --------------------------------------------------------
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+
+      # --------------------------------------------------------
+      # Verify AWS identity
+      # --------------------------------------------------------
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
+
+
+      # --------------------------------------------------------
+      # Login to Amazon ECR
+      # --------------------------------------------------------
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+
+      # --------------------------------------------------------
+      # Generate unique Build Number
+      #
+      # Format:
+      # YYYY.MM.DD-<SeqNum>
+      #
+      # Example:
+      # 2026.09.20-25
+      #
+      # GITHUB_RUN_NUMBER provides the sequence number.
+      # --------------------------------------------------------
+      - name: Generate Build Number
+        id: build-info
+        shell: bash
+        run: |
+          BUILD_DATE=$(date -u +"%Y.%m.%d")
+          BUILD_NUMBER="${BUILD_DATE}-${GITHUB_RUN_NUMBER}"
+
+          ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          IMAGE_URI="${ECR_REGISTRY}/${ECR_REPOSITORY}:${BUILD_NUMBER}"
+
+          echo "BUILD_NUMBER=${BUILD_NUMBER}" >> "$GITHUB_ENV"
+          echo "ECR_REGISTRY=${ECR_REGISTRY}" >> "$GITHUB_ENV"
+          echo "IMAGE_URI=${IMAGE_URI}" >> "$GITHUB_ENV"
+
+          echo "build_number=${BUILD_NUMBER}" >> "$GITHUB_OUTPUT"
+          echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
+
+          echo "=========================================="
+          echo "BUILD INFORMATION"
+          echo "=========================================="
+          echo "Build Number : ${BUILD_NUMBER}"
+          echo "Image URI    : ${IMAGE_URI}"
+          echo "Git SHA      : ${GITHUB_SHA}"
+          echo "=========================================="
+
+
+      # --------------------------------------------------------
+      # Build Docker image
+      # --------------------------------------------------------
+      - name: Build operator image
+        run: |
+          echo "Building Snowflake Operator image..."
+          echo "Build Number: ${BUILD_NUMBER}"
+          echo "Image: ${IMAGE_URI}"
+
+          docker build \
+            -t "${IMAGE_URI}" \
+            .
+
+
+      # --------------------------------------------------------
+      # Push Docker image
+      # --------------------------------------------------------
+      - name: Push operator image
+        run: |
+          echo "Pushing image to Amazon ECR..."
+          echo "Image: ${IMAGE_URI}"
+
+          docker push "${IMAGE_URI}"
+
+
+      # --------------------------------------------------------
+      # Build Summary
+      # --------------------------------------------------------
+      - name: Build Summary
+        run: |
+          echo "### Snowflake Operator Build" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Environment | DEV |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Build Number | ${BUILD_NUMBER} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Git SHA | ${GITHUB_SHA} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| ECR Image | ${IMAGE_URI} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Status | Build and Push Successful |" >> "$GITHUB_STEP_SUMMARY"
+
+
+  # ============================================================
+  # STAGE 3 - DEPLOY DEV
+  # ============================================================
+  deploy-dev:
+    name: Deploy DEV
+    needs: build
+    runs-on: ubuntu-latest
     environment: dev
 
     steps:
@@ -75,10 +214,23 @@ jobs:
         uses: actions/checkout@v6
 
 
-      # ---------------------------------------------------
-      # AWS authentication using GitHub OIDC
-      # ---------------------------------------------------
+      # --------------------------------------------------------
+      # Display Build information received from Build stage
+      # --------------------------------------------------------
+      - name: Display Build Information
+        run: |
+          echo "=========================================="
+          echo "DEPLOYMENT INFORMATION"
+          echo "=========================================="
+          echo "Environment  : DEV"
+          echo "Build Number : ${{ needs.build.outputs.build_number }}"
+          echo "Image URI    : ${{ needs.build.outputs.image_uri }}"
+          echo "=========================================="
 
+
+      # --------------------------------------------------------
+      # AWS authentication using GitHub OIDC
+      # --------------------------------------------------------
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v5
         with:
@@ -86,129 +238,117 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
 
-      # ---------------------------------------------------
+      # --------------------------------------------------------
       # Verify AWS identity
-      # ---------------------------------------------------
-
+      # --------------------------------------------------------
       - name: Verify AWS identity
         run: aws sts get-caller-identity
 
 
-      # ---------------------------------------------------
-      # Login to ECR
-      # ---------------------------------------------------
-
-      - name: Login to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v2
-
-
-      # ---------------------------------------------------
-      # Generate immutable Docker tag
-      # ---------------------------------------------------
-
-      - name: Set image variables
-        run: |
-          echo "IMAGE_TAG=dev-${GITHUB_SHA::12}" >> "$GITHUB_ENV"
-          echo "ECR_REGISTRY=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com" >> "$GITHUB_ENV"
-
-
-      # ---------------------------------------------------
-      # Build Docker image
-      # ---------------------------------------------------
-
-      - name: Build operator image
-        run: |
-          docker build \
-            -t ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG} .
-
-
-      # ---------------------------------------------------
-      # Push Docker image
-      # ---------------------------------------------------
-
-      - name: Push operator image
-        run: |
-          docker push \
-            ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}
-
-
-      # ---------------------------------------------------
+      # --------------------------------------------------------
       # Configure kubectl for EKS
-      # ---------------------------------------------------
-
+      # --------------------------------------------------------
       - name: Configure EKS kubeconfig
         run: |
           aws eks update-kubeconfig \
-            --region ${AWS_REGION} \
-            --name ${EKS_CLUSTER_NAME}
+            --region "${AWS_REGION}" \
+            --name "${EKS_CLUSTER_NAME}"
 
 
-      # ---------------------------------------------------
+      # --------------------------------------------------------
       # Verify Kubernetes access
-      # ---------------------------------------------------
-
+      # --------------------------------------------------------
       - name: Verify Kubernetes connection
         run: |
           kubectl get nodes
-          kubectl get namespace ${K8S_NAMESPACE}
+          kubectl get namespace "${K8S_NAMESPACE}"
 
 
-      # ---------------------------------------------------
-      # Update operator image
-      # ---------------------------------------------------
-
+      # --------------------------------------------------------
+      # Deploy exact image created by Build stage
+      # --------------------------------------------------------
       - name: Deploy operator image
         run: |
+          echo "Deploying Build:"
+          echo "${{ needs.build.outputs.build_number }}"
+
+          echo "Deploying Image:"
+          echo "${{ needs.build.outputs.image_uri }}"
+
           kubectl set image \
             deployment/snowflake-operator \
-            operator=${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG} \
-            -n ${K8S_NAMESPACE}
+            operator="${{ needs.build.outputs.image_uri }}" \
+            -n "${K8S_NAMESPACE}"
 
 
-      # ---------------------------------------------------
+      # --------------------------------------------------------
       # Wait for rollout
-      # ---------------------------------------------------
-
+      # --------------------------------------------------------
       - name: Wait for operator rollout
         run: |
           kubectl rollout status \
             deployment/snowflake-operator \
-            -n ${K8S_NAMESPACE} \
+            -n "${K8S_NAMESPACE}" \
             --timeout=5m
 
 
-      # ---------------------------------------------------
-      # Apply Snowflake CR
-      # ---------------------------------------------------
+      # --------------------------------------------------------
+      # Display deployed Kubernetes image
+      # --------------------------------------------------------
+      - name: Verify deployed operator image
+        run: |
+          kubectl get deployment snowflake-operator \
+            -n "${K8S_NAMESPACE}" \
+            -o jsonpath='{.spec.template.spec.containers[*].image}'
 
+          echo ""
+
+
+      # --------------------------------------------------------
+      # Apply Snowflake CR
+      # --------------------------------------------------------
       - name: Deploy Snowflake database
         run: |
           kubectl apply \
             -f manifests/dev/database.yaml
 
 
-      # ---------------------------------------------------
-      # Validate CR
-      # ---------------------------------------------------
-
+      # --------------------------------------------------------
+      # Validate Snowflake CR
+      # --------------------------------------------------------
       - name: Verify Snowflake Database CR
         run: |
           kubectl get snowflakedatabase \
-            -n ${K8S_NAMESPACE}
+            -n "${K8S_NAMESPACE}"
 
           kubectl describe snowflakedatabase \
             dev-test-db \
-            -n ${K8S_NAMESPACE}
+            -n "${K8S_NAMESPACE}"
 
 
-      # ---------------------------------------------------
+      # --------------------------------------------------------
+      # Deployment Summary
+      # --------------------------------------------------------
+      - name: Deployment Summary
+        run: |
+          echo "### DEV Deployment" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Environment | DEV |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Build Number | ${{ needs.build.outputs.build_number }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Image | ${{ needs.build.outputs.image_uri }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Kubernetes Namespace | ${K8S_NAMESPACE} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Status | Deployment Successful |" >> "$GITHUB_STEP_SUMMARY"
+
+
+      # --------------------------------------------------------
       # Show operator logs if something failed
-      # ---------------------------------------------------
-
+      # --------------------------------------------------------
       - name: Operator logs
         if: failure()
         run: |
           kubectl logs \
-            -n ${K8S_NAMESPACE} \
+            -n "${K8S_NAMESPACE}" \
             -l app=snowflake-operator \
             --tail=200
