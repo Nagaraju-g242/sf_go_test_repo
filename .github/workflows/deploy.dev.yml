@@ -307,23 +307,82 @@ jobs:
       # --------------------------------------------------------
       # Apply Snowflake CR
       # --------------------------------------------------------
+            # --------------------------------------------------------
+      # Apply Snowflake Database CR
+      # Capture the CR name automatically
+      # --------------------------------------------------------
       - name: Deploy Snowflake database
+        id: deploy-database
         run: |
-          kubectl apply \
-            -f manifests/dev/database.yaml
+          CR_NAME=$(kubectl apply \
+            -f manifests/dev/database.yaml \
+            -o name)
+
+          CR_NAME="${CR_NAME##*/}"
+
+          echo "cr_name=${CR_NAME}" >> "$GITHUB_OUTPUT"
+
+          echo "=========================================="
+          echo "SNOWFLAKE DATABASE CR DEPLOYED"
+          echo "=========================================="
+          echo "CR Name: ${CR_NAME}"
+          echo "=========================================="
 
 
       # --------------------------------------------------------
-      # Validate Snowflake CR
+      # Verify the database CR deployed by THIS pipeline
       # --------------------------------------------------------
       - name: Verify Snowflake Database CR
         run: |
+          CR_NAME="${{ steps.deploy-database.outputs.cr_name }}"
+
+          echo "=========================================="
+          echo "SNOWFLAKE DATABASE CRs"
+          echo "=========================================="
+
           kubectl get snowflakedatabase \
             -n "${K8S_NAMESPACE}"
 
+          echo ""
+          echo "=========================================="
+          echo "DEPLOYED DATABASE CR DETAILS"
+          echo "=========================================="
+          echo "CR Name: ${CR_NAME}"
+          echo ""
+
           kubectl describe snowflakedatabase \
-            dev-test-db \
+            "${CR_NAME}" \
             -n "${K8S_NAMESPACE}"
+
+
+      # --------------------------------------------------------
+      # Display database deployment status
+      # --------------------------------------------------------
+      - name: Display Snowflake Database Status
+        run: |
+          CR_NAME="${{ steps.deploy-database.outputs.cr_name }}"
+
+          DB_NAME=$(kubectl get snowflakedatabase "${CR_NAME}" \
+            -n "${K8S_NAMESPACE}" \
+            -o jsonpath='{.spec.name}')
+
+          READY=$(kubectl get snowflakedatabase "${CR_NAME}" \
+            -n "${K8S_NAMESPACE}" \
+            -o jsonpath='{.status.ready}')
+
+          MESSAGE=$(kubectl get snowflakedatabase "${CR_NAME}" \
+            -n "${K8S_NAMESPACE}" \
+            -o jsonpath='{.status.message}')
+
+          echo ""
+          echo "=========================================="
+          echo "SNOWFLAKE DATABASE DEPLOYMENT STATUS"
+          echo "=========================================="
+          echo "CR Name       : ${CR_NAME}"
+          echo "Database Name : ${DB_NAME}"
+          echo "Ready         : ${READY}"
+          echo "Message       : ${MESSAGE}"
+          echo "=========================================="
 
 
       # --------------------------------------------------------
