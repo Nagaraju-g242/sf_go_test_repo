@@ -1,0 +1,341 @@
+name: AWS Infrastructure - Create Destroy
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Select AWS infrastructure action"
+        required: true
+        type: choice
+        options:
+          - create
+          - destroy
+        default: create
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+
+  ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+
+  EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME }}
+  EKS_KUBERNETES_VERSION: ${{ vars.EKS_KUBERNETES_VERSION }}
+
+  VPC_CIDR: ${{ vars.VPC_CIDR }}
+  PUBLIC_SUBNET_1_CIDR: ${{ vars.PUBLIC_SUBNET_1_CIDR }}
+  PUBLIC_SUBNET_2_CIDR: ${{ vars.PUBLIC_SUBNET_2_CIDR }}
+
+  EKS_CLUSTER_ROLE_NAME: ${{ vars.EKS_CLUSTER_ROLE_NAME }}
+  EKS_NODE_ROLE_NAME: ${{ vars.EKS_NODE_ROLE_NAME }}
+
+  EKS_NODEGROUP_NAME: ${{ vars.EKS_NODEGROUP_NAME }}
+  EKS_INSTANCE_TYPES: ${{ vars.EKS_INSTANCE_TYPES }}
+  EKS_DESIRED_NODES: ${{ vars.EKS_DESIRED_NODES }}
+  EKS_MIN_NODES: ${{ vars.EKS_MIN_NODES }}
+  EKS_MAX_NODES: ${{ vars.EKS_MAX_NODES }}
+
+jobs:
+
+  # ============================================================
+  # STAGE 1 - VALIDATE
+  # ============================================================
+  validate:
+    name: Validate AWS Infrastructure
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: aws-infra-bootstrap
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: aws-infra-bootstrap/go.mod
+          cache-dependency-path: aws-infra-bootstrap/go.sum
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Check formatting
+        run: |
+          UNFORMATTED="$(gofmt -l .)"
+
+          if [ -n "$UNFORMATTED" ]; then
+            echo "The following Go files are not formatted:"
+            echo "$UNFORMATTED"
+            echo ""
+            echo "Run gofmt locally and commit the changes."
+            exit 1
+          fi
+
+          echo "All infrastructure Go files are correctly formatted."
+
+      - name: Go Vet
+        run: go vet ./...
+
+      - name: Go Test
+        run: go test ./...
+
+      - name: Build Infrastructure Tool
+        run: go build ./...
+
+      - name: Validation Summary
+        run: |
+          echo "### AWS Infrastructure Validation" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Check | Status |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Go Formatting | Passed |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Go Vet | Passed |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Go Test | Passed |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Go Build | Passed |" >> "$GITHUB_STEP_SUMMARY"
+
+
+  # ============================================================
+  # STAGE 2A - CREATE INFRASTRUCTURE
+  # ============================================================
+  create:
+    name: Create AWS Infrastructure
+    needs: validate
+
+    if: ${{ inputs.action == 'create' }}
+
+    runs-on: ubuntu-latest
+    environment: dev
+
+    defaults:
+      run:
+        working-directory: aws-infra-bootstrap
+
+    env:
+      ALLOW_INFRA_CREATE: "true"
+      ALLOW_INFRA_DESTROY: "false"
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: aws-infra-bootstrap/go.mod
+          cache-dependency-path: aws-infra-bootstrap/go.sum
+          cache: true
+
+
+      # --------------------------------------------------------
+      # AWS Authentication - GitHub OIDC
+      # --------------------------------------------------------
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_INFRA_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+
+      # --------------------------------------------------------
+      # Verify AWS Identity
+      # --------------------------------------------------------
+      - name: Verify AWS identity
+        run: |
+          echo "AWS identity used by infrastructure pipeline:"
+          aws sts get-caller-identity
+
+
+      # --------------------------------------------------------
+      # Display Infrastructure Configuration
+      # --------------------------------------------------------
+      - name: Display Infrastructure Configuration
+        run: |
+          echo "=========================================="
+          echo "AWS INFRASTRUCTURE - CREATE"
+          echo "=========================================="
+          echo "AWS Region             : ${AWS_REGION}"
+          echo "ECR Repository         : ${ECR_REPOSITORY}"
+          echo "EKS Cluster            : ${EKS_CLUSTER_NAME}"
+          echo "Kubernetes Version     : ${EKS_KUBERNETES_VERSION}"
+          echo ""
+          echo "VPC CIDR               : ${VPC_CIDR}"
+          echo "Public Subnet 1        : ${PUBLIC_SUBNET_1_CIDR}"
+          echo "Public Subnet 2        : ${PUBLIC_SUBNET_2_CIDR}"
+          echo ""
+          echo "Cluster IAM Role       : ${EKS_CLUSTER_ROLE_NAME}"
+          echo "Node IAM Role          : ${EKS_NODE_ROLE_NAME}"
+          echo ""
+          echo "Node Group             : ${EKS_NODEGROUP_NAME}"
+          echo "Instance Type          : ${EKS_INSTANCE_TYPES}"
+          echo "Desired Nodes          : ${EKS_DESIRED_NODES}"
+          echo "Minimum Nodes          : ${EKS_MIN_NODES}"
+          echo "Maximum Nodes          : ${EKS_MAX_NODES}"
+          echo ""
+          echo "ALLOW_INFRA_CREATE     : ${ALLOW_INFRA_CREATE}"
+          echo "ALLOW_INFRA_DESTROY    : ${ALLOW_INFRA_DESTROY}"
+          echo "=========================================="
+
+
+      # --------------------------------------------------------
+      # Create AWS Infrastructure
+      # --------------------------------------------------------
+      - name: Create AWS Infrastructure
+        run: |
+          echo "Starting AWS infrastructure creation..."
+
+          go run ./cmd/infrastructure create
+
+
+      # --------------------------------------------------------
+      # Verify Infrastructure
+      # --------------------------------------------------------
+      - name: Verify EKS Cluster
+        run: |
+          aws eks describe-cluster \
+            --name "${EKS_CLUSTER_NAME}" \
+            --region "${AWS_REGION}" \
+            --query "cluster.{Name:name,Status:status,Version:version}" \
+            --output table
+
+      - name: Verify EKS Node Group
+        run: |
+          aws eks describe-nodegroup \
+            --cluster-name "${EKS_CLUSTER_NAME}" \
+            --nodegroup-name "${EKS_NODEGROUP_NAME}" \
+            --region "${AWS_REGION}" \
+            --query "nodegroup.{Name:nodegroupName,Status:status,InstanceTypes:instanceTypes,Desired:scalingConfig.desiredSize}" \
+            --output table
+
+      - name: Verify ECR Repository
+        run: |
+          aws ecr describe-repositories \
+            --repository-names "${ECR_REPOSITORY}" \
+            --region "${AWS_REGION}" \
+            --query "repositories[].{Repository:repositoryName,URI:repositoryUri}" \
+            --output table
+
+
+      # --------------------------------------------------------
+      # Create Summary
+      # --------------------------------------------------------
+      - name: Create Summary
+        if: success()
+        run: |
+          echo "### AWS Infrastructure CREATE" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Action | CREATE |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| AWS Region | ${AWS_REGION} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| EKS Cluster | ${EKS_CLUSTER_NAME} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Kubernetes Version | ${EKS_KUBERNETES_VERSION} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Node Group | ${EKS_NODEGROUP_NAME} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Instance Type | ${EKS_INSTANCE_TYPES} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| ECR Repository | ${ECR_REPOSITORY} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Status | Infrastructure created successfully |" >> "$GITHUB_STEP_SUMMARY"
+
+
+  # ============================================================
+  # STAGE 2B - DESTROY INFRASTRUCTURE
+  # ============================================================
+  destroy:
+    name: Destroy AWS Infrastructure
+    needs: validate
+
+    if: ${{ inputs.action == 'destroy' }}
+
+    runs-on: ubuntu-latest
+
+    # Recommended:
+    # Configure required reviewers for this environment.
+    environment: infra-destroy
+
+    defaults:
+      run:
+        working-directory: aws-infra-bootstrap
+
+    env:
+      ALLOW_INFRA_CREATE: "false"
+      ALLOW_INFRA_DESTROY: "true"
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: aws-infra-bootstrap/go.mod
+          cache-dependency-path: aws-infra-bootstrap/go.sum
+          cache: true
+
+
+      # --------------------------------------------------------
+      # AWS Authentication - GitHub OIDC
+      # --------------------------------------------------------
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_INFRA_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+
+      # --------------------------------------------------------
+      # Verify AWS Identity
+      # --------------------------------------------------------
+      - name: Verify AWS identity
+        run: |
+          aws sts get-caller-identity
+
+
+      # --------------------------------------------------------
+      # Display Destroy Configuration
+      # --------------------------------------------------------
+      - name: Display Destroy Configuration
+        run: |
+          echo "=========================================="
+          echo "WARNING - AWS INFRASTRUCTURE DESTROY"
+          echo "=========================================="
+          echo "AWS Region             : ${AWS_REGION}"
+          echo "EKS Cluster            : ${EKS_CLUSTER_NAME}"
+          echo "Node Group             : ${EKS_NODEGROUP_NAME}"
+          echo "ECR Repository         : ${ECR_REPOSITORY}"
+          echo ""
+          echo "ALLOW_INFRA_CREATE     : ${ALLOW_INFRA_CREATE}"
+          echo "ALLOW_INFRA_DESTROY    : ${ALLOW_INFRA_DESTROY}"
+          echo "=========================================="
+
+
+      # --------------------------------------------------------
+      # Destroy AWS Infrastructure
+      # --------------------------------------------------------
+      - name: Destroy AWS Infrastructure
+        run: |
+          echo "Starting AWS infrastructure destruction..."
+
+          go run ./cmd/infrastructure destroy
+
+
+      # --------------------------------------------------------
+      # Destroy Summary
+      # --------------------------------------------------------
+      - name: Destroy Summary
+        if: success()
+        run: |
+          echo "### AWS Infrastructure DESTROY" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Action | DESTROY |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| AWS Region | ${AWS_REGION} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| EKS Cluster | ${EKS_CLUSTER_NAME} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Node Group | ${EKS_NODEGROUP_NAME} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Status | Infrastructure destroy completed |" >> "$GITHUB_STEP_SUMMARY"
