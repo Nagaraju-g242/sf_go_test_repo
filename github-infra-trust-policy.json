@@ -1,0 +1,23 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Effect": "Allow",
+        "Principal": {
+          "Federated": "arn:aws:iam::752192503262:oidc-provider/token.actions.githubusercontent.com"
+        },
+        "Action": "sts:AssumeRoleWithWebIdentity",
+        "Condition": {
+          "StringEquals": {
+            "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+          },
+          "ForAnyValue:StringEquals": {
+            "token.actions.githubusercontent.com:sub": [
+              "repo:Nagaraju-g242@311674476/sf_go_test_repo@1374598318:environment:dev",
+              "repo:Nagaraju-g242@311674476/sf_go_test_repo@1374598318:environment:infra-destroy"
+            ]
+          }
+        }
+      }
+    ]
+  }
