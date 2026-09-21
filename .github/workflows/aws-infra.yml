@@ -1,0 +1,212 @@
+name: AWS Infrastructure - Create Destroy
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "AWS infrastructure action"
+        required: true
+        type: choice
+        options:
+          - create
+          - destroy
+        default: create
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+
+jobs:
+
+  # ============================================================
+  # STAGE 1 - VALIDATE
+  # ============================================================
+  validate:
+    name: Validate AWS Infrastructure
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: aws-infra-bootstrap
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: aws-infra-bootstrap/go.mod
+          cache-dependency-path: aws-infra-bootstrap/go.sum
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Check formatting
+        run: |
+          UNFORMATTED="$(gofmt -l .)"
+
+          if [ -n "$UNFORMATTED" ]; then
+            echo "The following Go files are not formatted:"
+            echo "$UNFORMATTED"
+            exit 1
+          fi
+
+          echo "All infrastructure Go files are correctly formatted."
+
+      - name: Go Vet
+        run: go vet ./...
+
+      - name: Go Test
+        run: go test ./...
+
+      - name: Build Infrastructure Tool
+        run: go build ./...
+
+      - name: Validation Summary
+        run: |
+          echo "### AWS Infrastructure Validation" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Validation completed successfully." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Formatting: Passed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Go Vet: Passed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Go Test: Passed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Go Build: Passed" >> "$GITHUB_STEP_SUMMARY"
+
+
+  # ============================================================
+  # STAGE 2 - CREATE AWS INFRASTRUCTURE
+  # ============================================================
+  create:
+    name: Create AWS Infrastructure
+    needs: validate
+
+    if: ${{ inputs.action == 'create' }}
+
+    runs-on: ubuntu-latest
+    environment: dev
+
+    defaults:
+      run:
+        working-directory: aws-infra-bootstrap
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: aws-infra-bootstrap/go.mod
+          cache-dependency-path: aws-infra-bootstrap/go.sum
+          cache: true
+
+      # --------------------------------------------------------
+      # GitHub OIDC → AWS
+      # --------------------------------------------------------
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_INFRA_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
+
+      # --------------------------------------------------------
+      # Create infrastructure
+      # --------------------------------------------------------
+      - name: Create AWS Infrastructure
+        run: |
+          echo "=========================================="
+          echo "CREATING AWS INFRASTRUCTURE"
+          echo "Region: ${AWS_REGION}"
+          echo "=========================================="
+
+          go run ./cmd/infrastructure create
+
+      - name: Create Summary
+        if: success()
+        run: |
+          echo "### AWS Infrastructure - CREATE" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Action | CREATE |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Region | ${AWS_REGION} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Status | Successful |" >> "$GITHUB_STEP_SUMMARY"
+
+
+  # ============================================================
+  # STAGE 3 - DESTROY AWS INFRASTRUCTURE
+  # ============================================================
+  destroy:
+    name: Destroy AWS Infrastructure
+    needs: validate
+
+    if: ${{ inputs.action == 'destroy' }}
+
+    runs-on: ubuntu-latest
+
+    # IMPORTANT:
+    # I recommend using a separate GitHub Environment
+    # with required approval for destructive operations.
+    environment: infra-destroy
+
+    defaults:
+      run:
+        working-directory: aws-infra-bootstrap
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: aws-infra-bootstrap/go.mod
+          cache-dependency-path: aws-infra-bootstrap/go.sum
+          cache: true
+
+      # --------------------------------------------------------
+      # GitHub OIDC → AWS
+      # --------------------------------------------------------
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_INFRA_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity
+
+      # --------------------------------------------------------
+      # Destroy infrastructure
+      # --------------------------------------------------------
+      - name: Destroy AWS Infrastructure
+        run: |
+          echo "=========================================="
+          echo "DESTROYING AWS INFRASTRUCTURE"
+          echo "Region: ${AWS_REGION}"
+          echo "=========================================="
+
+          go run ./cmd/infrastructure destroy
+
+      - name: Destroy Summary
+        if: success()
+        run: |
+          echo "### AWS Infrastructure - DESTROY" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Action | DESTROY |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Region | ${AWS_REGION} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Status | Successful |" >> "$GITHUB_STEP_SUMMARY"
