@@ -38,5 +38,5 @@ $env:EKS_MAX_NODES = "4"
 
 # Safety
 
-$env:ALLOW_INFRA_CREATE = "false"
-$env:ALLOW_INFRA_DESTROY = "true"
+$env:ALLOW_INFRA_CREATE = "true"
+$env:ALLOW_INFRA_DESTROY = "false"
