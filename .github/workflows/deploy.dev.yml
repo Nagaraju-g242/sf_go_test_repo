@@ -294,7 +294,10 @@ jobs:
 
           echo ""
           echo "Creating ServiceAccount..."
-          kubectl apply -f deploy/serviceaccount.yaml
+          kubectl create serviceaccount snowflake-operator \
+            -n "${K8S_NAMESPACE}" \
+            --dry-run=client \
+            -o yaml | kubectl apply -f -
 
           echo ""
           echo "Applying Kubernetes RBAC..."
