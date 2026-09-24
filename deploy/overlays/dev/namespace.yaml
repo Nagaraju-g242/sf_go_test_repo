@@ -1,5 +1,9 @@
-apiVersion: v1
-kind: Namespace
+- name: Verify Kubernetes connection
+  run: |
+    kubectl get nodes
 
-metadata:
-  name: snowflake-system
+- name: Create Kubernetes namespace
+  run: |
+    kubectl apply -f deploy/namespace.yaml
+
+    kubectl get namespace "${K8S_NAMESPACE}"
