@@ -255,12 +255,22 @@ jobs:
             --name "${EKS_CLUSTER_NAME}"
 
 
-      # --------------------------------------------------------
-      # Verify Kubernetes access
-      # --------------------------------------------------------
       - name: Verify Kubernetes connection
         run: |
+          echo "=========================================="
+          echo "VERIFY KUBERNETES CONNECTION"
+          echo "=========================================="
+
           kubectl get nodes
+
+          echo ""
+          echo "Ensuring namespace exists: ${K8S_NAMESPACE}"
+
+          kubectl create namespace "${K8S_NAMESPACE}" \
+            --dry-run=client \
+            -o yaml | kubectl apply -f -
+
+          echo ""
           kubectl get namespace "${K8S_NAMESPACE}"
 
 
