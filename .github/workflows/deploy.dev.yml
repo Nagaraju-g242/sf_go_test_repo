@@ -273,6 +273,45 @@ jobs:
           echo ""
           kubectl get namespace "${K8S_NAMESPACE}"
 
+            # --------------------------------------------------------
+      # Bootstrap Snowflake Operator Kubernetes resources
+      # Required for a newly created EKS cluster
+      # --------------------------------------------------------
+      - name: Bootstrap Snowflake Operator
+        run: |
+          echo "=========================================="
+          echo "BOOTSTRAP SNOWFLAKE OPERATOR"
+          echo "=========================================="
+
+          echo "Creating namespace..."
+          kubectl apply -f deploy/namespace.yaml
+
+          echo ""
+          echo "Installing Snowflake CRDs..."
+          kubectl apply -f config/crd/
+
+          echo ""
+          echo "Creating ServiceAccount..."
+          kubectl apply -f deploy/serviceaccount.yaml
+
+          echo ""
+          echo "Applying Kubernetes RBAC..."
+          kubectl apply -f config/rbac/
+
+          echo ""
+          echo "Creating Snowflake Operator Deployment..."
+          kubectl apply -f deploy/operator.yaml
+
+          echo ""
+          echo "=========================================="
+          echo "BOOTSTRAP COMPLETE"
+          echo "=========================================="
+
+          kubectl get deployment \
+            -n "${K8S_NAMESPACE}"
+
+          kubectl get pods \
+            -n "${K8S_NAMESPACE}"
 
       # --------------------------------------------------------
       # Deploy exact image created by Build stage
