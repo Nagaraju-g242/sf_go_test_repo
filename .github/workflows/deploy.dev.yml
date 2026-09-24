@@ -325,6 +325,15 @@ jobs:
            kubectl get pods \
             -n "${K8S_NAMESPACE}"
 
+      - name: Create Snowflake Operator Config
+        run: |
+          kubectl create secret generic snowflake-operator-config \
+          -n "${K8S_NAMESPACE}" \
+          --from-literal=SNOWFLAKE_ACCOUNT="${{ vars.SNOWFLAKE_ACCOUNT }}" \
+          --from-literal=SNOWFLAKE_USER="${{ vars.SNOWFLAKE_USER }}" \
+          --dry-run=client \
+          -o yaml | kubectl apply -f -
+      
       # --------------------------------------------------------
       # Deploy exact image created by Build stage
       # --------------------------------------------------------
