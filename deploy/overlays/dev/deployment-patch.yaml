@@ -13,4 +13,4 @@ spec:
     spec:
       containers:
         - name: operator
-          image: 752192503262.dkr.ecr.us-east-2.amazonaws.com/snowflake-operator:1.0.1-dev
+          image: 316658412757.dkr.ecr.us-east-2.amazonaws.com/snowflake-operator:1.0.1-dev
