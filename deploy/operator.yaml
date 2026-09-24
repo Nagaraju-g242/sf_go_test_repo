@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: snowflake-operator
+  namespace: snowflake-system
+  labels:
+    app: snowflake-operator
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: snowflake-operator
+
+  template:
+    metadata:
+      labels:
+        app: snowflake-operator
+
+    spec:
+      serviceAccountName: snowflake-operator
+
+      containers:
+        - name: operator
+
+          # Placeholder image.
+          # GitHub Actions replaces this with the current build.
+          image: 316658412757.dkr.ecr.us-east-2.amazonaws.com/snowflake-operator:latest
+
+          imagePullPolicy: Always
+
+          env:
+            - name: SNOWFLAKE_ACCOUNT
+              valueFrom:
+                secretKeyRef:
+                  name: snowflake-operator-config
+                  key: SNOWFLAKE_ACCOUNT
+
+            - name: SNOWFLAKE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: snowflake-operator-config
+                  key: SNOWFLAKE_USER
+
+            - name: SNOWFLAKE_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  name: snowflake-operator-config
+                  key: SNOWFLAKE_DATABASE
+
+            - name: SNOWFLAKE_SCHEMA
+              valueFrom:
+                secretKeyRef:
+                  name: snowflake-operator-config
+                  key: SNOWFLAKE_SCHEMA
+
+            - name: SNOWFLAKE_WAREHOUSE
+              valueFrom:
+                secretKeyRef:
+                  name: snowflake-operator-config
+                  key: SNOWFLAKE_WAREHOUSE
+
+            - name: SNOWFLAKE_TOKEN_FILE
+              value: /var/run/secrets/tokens/snowflake-token
+
+          volumeMounts:
+            - name: snowflake-token
+              mountPath: /var/run/secrets/tokens
+              readOnly: true
+
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+
+      volumes:
+        - name: snowflake-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: snowflake-token
+                  audience: snowflakecomputing.com
+                  expirationSeconds: 3600
