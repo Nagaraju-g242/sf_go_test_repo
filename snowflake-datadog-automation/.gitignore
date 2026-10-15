@@ -1,0 +1,8 @@
+secrets/
+*.tfstate
+*.tfstate.*
+.terraform/
+*.tfvars
+*.pem
+*.p8
+*.pub

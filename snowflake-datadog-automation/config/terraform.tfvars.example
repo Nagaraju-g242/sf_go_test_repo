@@ -1,0 +1,9 @@
+# Replace these example metric names with names actually available in your Datadog Metrics Explorer.
+# If a metric isn't available, use an empty string to skip its monitor.
+accounts = {
+  dev = { login_metric = "", failed_login_metric = "", credit_metric = "" }
+  uat = { login_metric = "", failed_login_metric = "", credit_metric = "" }
+  prod = { login_metric = "", failed_login_metric = "", credit_metric = "" }
+}
+# Role UUIDs allowed to edit the dashboard; view permissions are configured separately.
+sre_role_ids = []
