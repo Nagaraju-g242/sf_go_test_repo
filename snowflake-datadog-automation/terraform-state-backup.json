@@ -1,0 +1,255 @@
+{
+  "version": 4,
+  "terraform_version": "1.15.8",
+  "serial": 9,
+  "lineage": "58307f22-2820-683b-4fc0-150975c73be7",
+  "outputs": {
+    "dashboard_url": {
+      "value": "/dashboard/vkx-wkx-bdf/enterprise-snowflake-monitoring",
+      "type": "string"
+    }
+  },
+  "resources": [
+    {
+      "mode": "managed",
+      "type": "datadog_dashboard",
+      "name": "snowflake",
+      "provider": "provider[\"registry.terraform.io/datadog/datadog\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "dashboard_lists": null,
+            "dashboard_lists_removed": [],
+            "description": "Multi-account Snowflake monitor overview, provisioned by Terraform.",
+            "id": "vkx-wkx-bdf",
+            "is_read_only": false,
+            "layout_type": "ordered",
+            "notify_list": [],
+            "reflow_type": "",
+            "restricted_roles": [],
+            "tab": [],
+            "tags": [],
+            "template_variable": [],
+            "template_variable_preset": [],
+            "title": "Enterprise Snowflake Monitoring",
+            "url": "/dashboard/vkx-wkx-bdf/enterprise-snowflake-monitoring",
+            "widget": [
+              {
+                "alert_graph_definition": [],
+                "alert_value_definition": [
+                  {
+                    "alert_id": "332061703",
+                    "description": "",
+                    "precision": 0,
+                    "text_align": "",
+                    "title": "Snowflake DEV Monitor",
+                    "title_align": "",
+                    "title_size": "",
+                    "unit": ""
+                  }
+                ],
+                "change_definition": [],
+                "check_status_definition": [],
+                "distribution_definition": [],
+                "event_stream_definition": [],
+                "event_timeline_definition": [],
+                "free_text_definition": [],
+                "geomap_definition": [],
+                "group_definition": [],
+                "heatmap_definition": [],
+                "hostmap_definition": [],
+                "id": 6245678613561728,
+                "iframe_definition": [],
+                "image_definition": [],
+                "list_stream_definition": [],
+                "log_stream_definition": [],
+                "manage_status_definition": [],
+                "note_definition": [],
+                "powerpack_definition": [],
+                "query_table_definition": [],
+                "query_value_definition": [],
+                "run_workflow_definition": [],
+                "scatterplot_definition": [],
+                "service_level_objective_definition": [],
+                "servicemap_definition": [],
+                "slo_list_definition": [],
+                "split_graph_definition": [],
+                "sunburst_definition": [],
+                "timeseries_definition": [],
+                "toplist_definition": [],
+                "topology_map_definition": [],
+                "trace_service_definition": [],
+                "treemap_definition": [],
+                "widget_layout": []
+              },
+              {
+                "alert_graph_definition": [],
+                "alert_value_definition": [],
+                "change_definition": [],
+                "check_status_definition": [],
+                "distribution_definition": [],
+                "event_stream_definition": [],
+                "event_timeline_definition": [],
+                "free_text_definition": [],
+                "geomap_definition": [],
+                "group_definition": [],
+                "heatmap_definition": [],
+                "hostmap_definition": [],
+                "id": 1098747202564916,
+                "iframe_definition": [],
+                "image_definition": [],
+                "list_stream_definition": [],
+                "log_stream_definition": [],
+                "manage_status_definition": [
+                  {
+                    "color_preference": "text",
+                    "display_format": "countsAndList",
+                    "hide_zero_counts": false,
+                    "query": "Snowflake Login History",
+                    "show_last_triggered": true,
+                    "show_priority": false,
+                    "sort": "status,asc",
+                    "summary_type": "monitors",
+                    "title": "Snowflake Monitor Status",
+                    "title_align": "",
+                    "title_size": ""
+                  }
+                ],
+                "note_definition": [],
+                "powerpack_definition": [],
+                "query_table_definition": [],
+                "query_value_definition": [],
+                "run_workflow_definition": [],
+                "scatterplot_definition": [],
+                "service_level_objective_definition": [],
+                "servicemap_definition": [],
+                "slo_list_definition": [],
+                "split_graph_definition": [],
+                "sunburst_definition": [],
+                "timeseries_definition": [],
+                "toplist_definition": [],
+                "topology_map_definition": [],
+                "trace_service_definition": [],
+                "treemap_definition": [],
+                "widget_layout": []
+              }
+            ]
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "bnVsbA==",
+          "dependencies": [
+            "datadog_monitor.snowflake_login"
+          ]
+        }
+      ]
+    },
+    {
+      "mode": "managed",
+      "type": "datadog_monitor",
+      "name": "snowflake_login",
+      "provider": "provider[\"registry.terraform.io/datadog/datadog\"]",
+      "instances": [
+        {
+          "schema_version": 0,
+          "attributes": {
+            "assets": [],
+            "draft_status": "published",
+            "enable_logs_sample": null,
+            "enable_samples": null,
+            "escalation_message": "",
+            "evaluation_delay": 0,
+            "force_delete": null,
+            "group_retention_duration": "",
+            "groupby_simple_monitor": null,
+            "id": "332061703",
+            "ignore_tag_keys": null,
+            "include_tags": true,
+            "message": "Snowflake login count exceeded the configured threshold.",
+            "monitor_threshold_windows": [],
+            "monitor_thresholds": [
+              {
+                "critical": "100",
+                "critical_query": "",
+                "critical_recovery": "",
+                "critical_recovery_query": "",
+                "ok": "",
+                "unknown": "",
+                "warning": "50",
+                "warning_recovery": ""
+              }
+            ],
+            "name": "[AUTO] Snowflake Login History",
+            "new_group_delay": 0,
+            "new_host_delay": 300,
+            "no_data_timeframe": null,
+            "notification_preset_name": "",
+            "notify_audit": false,
+            "notify_by": [],
+            "notify_no_data": false,
+            "on_missing_data": "",
+            "priority": "",
+            "query": "formula(\"query1\").last(\"2h\") \u003e= 100",
+            "renotify_interval": 0,
+            "renotify_occurrences": 0,
+            "renotify_statuses": null,
+            "require_full_window": true,
+            "restricted_roles": [],
+            "scheduling_options": [],
+            "tags": [
+              "environment:dev",
+              "service:snowflake",
+              "team:sre"
+            ],
+            "timeout_h": 0,
+            "type": "data-quality alert",
+            "validate": null,
+            "variables": [
+              {
+                "aggregate_augmented_query": [],
+                "aggregate_filtered_query": [],
+                "cloud_cost_query": [],
+                "data_jobs_query": [],
+                "data_quality_query": [
+                  {
+                    "data_source": "data_quality_metrics",
+                    "filter": "search for database_table where `entity_id:93b694c56bdd591c`",
+                    "group_by": [
+                      "entity_id",
+                      "table",
+                      "schema",
+                      "database"
+                    ],
+                    "measure": "custom",
+                    "monitor_options": [
+                      {
+                        "crontab_override": "0 * * * *",
+                        "custom_sql": "SELECT\n    USER_NAME,\n    COUNT(*) AS dd_value\nFROM SNOWFLAKE.ACCOUNT_USAGE.LOGIN_HISTORY\nWHERE EVENT_TIMESTAMP \u003e= DATEADD('HOUR', -24, CURRENT_TIMESTAMP())\nGROUP BY USER_NAME\nORDER BY dd_value DESC\n",
+                        "custom_where": "",
+                        "group_by_columns": [],
+                        "model_configuration": [],
+                        "model_type_override": "any",
+                        "sensitivity": 0,
+                        "source_to_target_config": []
+                      }
+                    ],
+                    "name": "query1",
+                    "schema_version": "0.0.1",
+                    "scope": ""
+                  }
+                ],
+                "event_query": []
+              }
+            ]
+          },
+          "sensitive_attributes": [],
+          "identity_schema_version": 0,
+          "private": "bnVsbA=="
+        }
+      ]
+    }
+  ],
+  "check_results": null
+}
+

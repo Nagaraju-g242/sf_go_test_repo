@@ -1,7 +1,16 @@
 terraform {
   required_version = ">= 1.5.0"
+
   required_providers {
-    datadog = { source = "DataDog/datadog", version = "~> 4.0" }
+    datadog = {
+      source  = "DataDog/datadog"
+      version = "~> 4.0"
+    }
+
+    snowflake = {
+      source  = "snowflakedb/snowflake"
+      version = "~> 2.0"
+    }
   }
 }
 provider "datadog" {}
@@ -17,6 +26,11 @@ variable "sre_role_ids" {
   type        = list(string)
   default     = []
   description = "Datadog role IDs used for dashboard editing restrictions"
+}
+variable "snowflake_monitor_ids" {
+  description = "Existing Snowflake Custom SQL monitor IDs"
+  type        = map(number)
+  default     = {}
 }
 locals {
   monitor_specs = merge([
@@ -45,20 +59,168 @@ resource "datadog_monitor" "snowflake" {
   notify_no_data      = false
   require_full_window = false
 }
+
+resource "datadog_monitor" "snowflake_auto" {
+  for_each = var.custom_sql_monitors
+
+  name = "[SF-${upper(each.value.environment)}] ${replace(each.key, "_", " ")}"
+
+  type = "data-quality alert"
+
+  query = "formula(\"query1\").last(\"2h\") >= ${each.value.critical}"
+
+  message = "Snowflake ${each.key} threshold exceeded in ${upper(each.value.environment)}."
+
+  monitor_thresholds {
+    critical = each.value.critical
+    warning  = each.value.warning
+  }
+
+  variables {
+    data_quality_query {
+      name           = "query1"
+      data_source    = "data_quality_metrics"
+      schema_version = "0.0.1"
+      measure        = "custom"
+
+      filter = "search for database_table where `entity_id:${each.value.entity_id}`"
+
+      group_by = [
+        "entity_id",
+        "table",
+        "schema",
+        "database"
+      ]
+
+      monitor_options {
+        custom_sql          = each.value.sql
+        model_type_override = "any"
+        crontab_override    = each.value.schedule
+      }
+    }
+  }
+
+  tags = [
+    "service:snowflake",
+    "environment:${each.value.environment}",
+    "team:sre",
+    "monitor:${each.key}"
+  ]
+
+  include_tags = true
+}
+
+resource "datadog_monitor" "snowflake_login" {
+  name = "[AUTO] Snowflake Login History"
+  type = "data-quality alert"
+
+  query = "formula(\"query1\").last(\"2h\") >= 100"
+
+  message = "Snowflake login count exceeded the configured threshold."
+
+  monitor_thresholds {
+    critical = 100
+    warning  = 50
+  }
+
+  variables {
+    data_quality_query {
+      name           = "query1"
+      data_source    = "data_quality_metrics"
+      schema_version = "0.0.1"
+      measure        = "custom"
+
+      filter = "search for database_table where `entity_id:93b694c56bdd591c`"
+
+      group_by = [
+        "entity_id",
+        "table",
+        "schema",
+        "database"
+      ]
+
+      monitor_options {
+        custom_sql = <<-SQL
+          SELECT
+              USER_NAME,
+              COUNT(*) AS dd_value
+          FROM SNOWFLAKE.ACCOUNT_USAGE.LOGIN_HISTORY
+          WHERE EVENT_TIMESTAMP >= DATEADD('HOUR', -24, CURRENT_TIMESTAMP())
+          GROUP BY USER_NAME
+          ORDER BY dd_value DESC
+        SQL
+
+        model_type_override = "any"
+        crontab_override    = "0 * * * *"
+      }
+    }
+  }
+
+  tags = [
+    "service:snowflake",
+    "environment:dev",
+    "team:sre"
+  ]
+
+  include_tags = true
+}
+
 resource "datadog_dashboard" "snowflake" {
   title       = "Enterprise Snowflake Monitoring"
   description = "Multi-account Snowflake monitor overview, provisioned by Terraform."
   layout_type = "ordered"
-  dynamic "widget" {
-    for_each = datadog_monitor.snowflake
-    content {
-      alert_value_definition {
-        alert_id = widget.value.id
-        title    = widget.value.name
-      }
+
+  restricted_roles = length(var.sre_role_ids) > 0 ? var.sre_role_ids : null
+
+  # DEV Custom SQL monitor
+  widget {
+    manage_status_definition {
+      title = "Snowflake DEV - Monitor Status"
+
+      query = "tag:service:snowflake tag:environment:dev"
+
+      summary_type        = "monitors"
+      display_format      = "countsAndList"
+      color_preference    = "text"
+      hide_zero_counts    = false
+      show_last_triggered = true
+      sort                = "status,asc"
     }
   }
-  # Role restrictions require validated Datadog role UUIDs and permissions.
-  restricted_roles = length(var.sre_role_ids) > 0 ? var.sre_role_ids : null
+
+  # Monitor Summary widget
+  widget {
+    manage_status_definition {
+      title               = "Snowflake Monitor Status"
+      query               = "Snowflake Login History"
+      summary_type        = "monitors"
+      display_format      = "countsAndList"
+      color_preference    = "text"
+      hide_zero_counts    = false
+      show_last_triggered = true
+      sort                = "status,asc"
+    }
+  }
 }
-output "dashboard_url" { value = datadog_dashboard.snowflake.url }
+
+output "dashboard_url" {
+  value = datadog_dashboard.snowflake.url
+}
+variable "custom_sql_monitors" {
+  description = "Snowflake Custom SQL monitors created automatically"
+  type = map(object({
+    environment = string
+    entity_id   = string
+    sql         = string
+    critical    = number
+    warning     = number
+    schedule    = string
+  }))
+  default = {}
+}
+output "snowflake_auto_monitor_ids" {
+  value = {
+    for name, monitor in datadog_monitor.snowflake_auto :
+    name => monitor.id
+  }
+}

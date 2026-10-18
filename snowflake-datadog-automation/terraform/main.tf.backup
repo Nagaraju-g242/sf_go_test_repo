@@ -1,0 +1,141 @@
+terraform {
+  required_version = ">= 1.5.0"
+  required_providers {
+    datadog = { source = "DataDog/datadog", version = "~> 4.0" }
+  }
+}
+provider "datadog" {}
+variable "accounts" {
+  type = map(object({
+    account_tag         = string
+    login_metric        = string
+    failed_login_metric = string
+    credit_metric       = string
+  }))
+}
+variable "sre_role_ids" {
+  type        = list(string)
+  default     = []
+  description = "Datadog role IDs used for dashboard editing restrictions"
+}
+variable "snowflake_monitor_ids" {
+  description = "Existing Snowflake Custom SQL monitor IDs"
+  type        = map(number)
+  default     = {}
+}
+locals {
+  monitor_specs = merge([
+    for account, metrics in var.accounts : {
+      for kind, spec in {
+        logins        = { metric = metrics.login_metric, threshold = 1000 }
+        failed_logins = { metric = metrics.failed_login_metric, threshold = 5 }
+        credits       = { metric = metrics.credit_metric, threshold = 10 }
+        } : "${account}_${kind}" => merge(spec, {
+          account     = account
+          account_tag = metrics.account_tag
+          kind        = kind
+      })
+      if spec.metric != ""
+    }
+  ]...)
+}
+resource "datadog_monitor" "snowflake" {
+  for_each = local.monitor_specs
+  name     = "[SF-${upper(each.value.account)}] ${replace(each.value.kind, "_", " ")}"
+  type     = "query alert"
+  query    = "sum(last_1h):sum:${each.value.metric}{snowflake_account:${each.value.account_tag}}.as_count() > ${each.value.threshold}"
+  message  = "Snowflake ${each.value.kind} threshold exceeded for ${each.value.account}. Investigate account activity."
+  tags     = ["service:snowflake", "snowflake_account:${each.value.account}", "team:sre"]
+  monitor_thresholds { critical = each.value.threshold }
+  notify_no_data      = false
+  require_full_window = false
+}
+
+resource "datadog_monitor" "snowflake_login" {
+  name = "[AUTO] Snowflake Login History"
+  type = "data-quality alert"
+
+  query = "formula(\"query1\").last(\"2h\") >= 100"
+
+  message = "Snowflake login count exceeded the configured threshold."
+
+  monitor_thresholds {
+    critical = 100
+    warning  = 50
+  }
+
+  variables {
+    data_quality_query {
+      name           = "query1"
+      data_source    = "data_quality_metrics"
+      schema_version = "0.0.1"
+      measure        = "custom"
+
+      filter = "search for database_table where `entity_id:93b694c56bdd591c`"
+
+      group_by = [
+        "entity_id",
+        "table",
+        "schema",
+        "database"
+      ]
+
+      monitor_options {
+        custom_sql = <<-SQL
+          SELECT
+              USER_NAME,
+              COUNT(*) AS dd_value
+          FROM SNOWFLAKE.ACCOUNT_USAGE.LOGIN_HISTORY
+          WHERE EVENT_TIMESTAMP >= DATEADD('HOUR', -24, CURRENT_TIMESTAMP())
+          GROUP BY USER_NAME
+          ORDER BY dd_value DESC
+        SQL
+
+        model_type_override = "any"
+        crontab_override    = "0 * * * *"
+      }
+    }
+  }
+
+  tags = [
+    "service:snowflake",
+    "environment:dev",
+    "team:sre"
+  ]
+
+  include_tags = true
+}
+
+resource "datadog_dashboard" "snowflake" {
+  title       = "Enterprise Snowflake Monitoring"
+  description = "Multi-account Snowflake monitor overview, provisioned by Terraform."
+  layout_type = "ordered"
+
+  restricted_roles = length(var.sre_role_ids) > 0 ? var.sre_role_ids : null
+
+  # DEV Custom SQL monitor
+  widget {
+    alert_value_definition {
+      alert_id = datadog_monitor.snowflake_login.id
+      title    = "Snowflake DEV Monitor"
+    }
+  }
+
+  # Monitor Summary widget
+  widget {
+    manage_status_definition {
+      title               = "Snowflake Monitor Status"
+      query               = "Snowflake Login History"
+      summary_type        = "monitors"
+      display_format      = "countsAndList"
+      color_preference    = "text"
+      hide_zero_counts    = false
+      show_last_triggered = true
+      sort                = "status,asc"
+    }
+  }
+}
+
+output "dashboard_url" {
+  value = datadog_dashboard.snowflake.url
+}
